@@ -1,0 +1,448 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model User {
+  id            String          @id @default(uuid())
+  name          String?
+  username      String?         @unique
+  email         String?         @unique
+  password      String?
+  emailVerified DateTime?
+  image         String?
+  bio           String?         // Added bio field
+  gender        String?         // Added gender field
+  location      String?         // Added location field
+  birthday      DateTime?       // Added birthday field
+  occupation    String?         // Added occupation field
+  tradingExperience String?     // Added tradingExperience field
+  avatar        String?         // Added avatar field
+  role          String
+  status        String          @default("ACTIVE") // ACTIVE, BANNED, SUSPENDED
+  kycVerified   Boolean         @default(false)
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+  signals       TradingSignal[]
+  subscriptions Subscription[]
+  licenses      License[]
+  profileVisibility ProfileVisibility?
+  emailTemplates EmailTemplate[]
+  emailVersions  EmailVersion[]
+  topics        Topic[]
+  comments      Comment[]
+  moderationLogs ModerationLog[] @relation("ModerationTarget")
+  moderatedLogs  ModerationLog[] @relation("ModerationModerator")
+  engagementEvents EngagementEvent[]
+  earningsLedgers EarningsLedger[]
+  auditLogs     AuditLog[]
+  orders        Order[]
+  products      Product[]
+  sentMessages   Message[] @relation("SentMessages")
+  receivedMessages Message[] @relation("ReceivedMessages")
+  uploads       Upload[]
+  reviews       Review[]
+}
+
+model Product {
+  id             String    @id @default(uuid())
+  userId         String
+  user           User      @relation(fields: [userId], references: [id])
+  name           String
+  slug           String    @unique
+  description    String?
+  currentVersion String?
+  price          Int
+  currency       String    @default("USD")
+  status         String    @default("DRAFT") // DRAFT, PENDING, APPROVED, REJECTED, RETIRED
+  categoryId     String?
+  category       Category? @relation(fields: [categoryId], references: [id])
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  licenses       License[]
+  moderationItems ModerationQueueItem[]
+  orders         Order[]
+  reviews        Review[]
+  versions       ProductVersion[]
+}
+
+model ModerationQueueItem {
+  id          String    @id @default(uuid())
+  status      String    @default("PENDING")
+  productId   String?
+  product     Product?  @relation(fields: [productId], references: [id])
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+}
+
+model License {
+  id          String    @id @default(uuid())
+  key         String    @unique
+  userId      String
+  user        User      @relation(fields: [userId], references: [id])
+  productId   String
+  product     Product   @relation(fields: [productId], references: [id])
+  issuedAt    DateTime  @default(now())
+  expiresAt   DateTime?
+  revokedAt   DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  downloads   Download[]   // Add downloads relation
+
+  @@index([userId])
+  @@index([productId])
+}
+
+model Download {
+  id          String    @id @default(uuid())
+  licenseId   String
+  license     License   @relation(fields: [licenseId], references: [id])
+  createdAt   DateTime  @default(now())
+  ipAddress   String?
+}
+
+model ProfileVisibility {
+  id          String  @id @default(uuid())
+  userId      String  @unique
+  user        User    @relation(fields: [userId], references: [id])
+  showRole    Boolean @default(true)
+  showLocation Boolean @default(true)
+  showOccupation Boolean @default(true)
+  showBirthday Boolean @default(true)
+  showTradingExperience Boolean @default(true)
+  showAvatar Boolean @default(true)
+}
+
+model Category {
+  id          String   @id @default(uuid())
+  name        String
+  slug        String   @unique
+  description String?
+  icon        String?  // Added icon field
+  color       String?
+  order       Int      @default(0)
+  topics      Topic[]
+  products    Product[]
+}
+
+model TradingSignal {
+  id          String    @id @default(uuid())
+  title       String
+  symbol      String
+  action      String  // BUY, SELL
+  entry       String
+  takeProfit  String
+  stopLoss    String
+  confidence  String
+  description String?
+  content     String
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  user        User      @relation(fields: [userId], references: [id])
+  userId      String
+
+  @@index([userId])
+}
+
+model Subscription {
+  id              String   @id @default(uuid())
+  userId          String
+  user            User     @relation(fields: [userId], references: [id])
+  planType        String   // MONTHLY, YEARLY
+  status          String   // ACTIVE, CANCELED, EXPIRED
+  startDate       DateTime
+  endDate         DateTime
+  autoRenew       Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([userId])
+  @@index([status])
+}
+
+model EmailTemplate {
+  id          String       @id @default(uuid())
+  name        String
+  slug        String       @unique
+  description String?
+  category    String       // transactional, marketing
+  active      Boolean      @default(true)
+  createdBy   String
+  user        User         @relation(fields: [createdBy], references: [id])
+  versions    EmailVersion[]
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  @@index([createdBy])
+  @@index([category])
+}
+
+model EmailVersion {
+  id                String   @id @default(uuid())
+  templateId        String
+  template          EmailTemplate @relation(fields: [templateId], references: [id])
+  subjectTemplate   String
+  htmlTemplate      String
+  textTemplate      String?
+  variables         String?  // JSON array of variable definitions
+  providerOverrides String?  // JSON object of provider-specific overrides
+  createdBy         String
+  user              User     @relation(fields: [createdBy], references: [id])
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@index([templateId])
+  @@index([createdBy])
+}
+
+model Topic {
+  id         String    @id @default(uuid())
+  title      String
+  content    String
+  userId     String
+  user       User      @relation(fields: [userId], references: [id])
+  categoryId String?
+  category   Category? @relation(fields: [categoryId], references: [id])
+  status     String    @default("ACTIVE") // ACTIVE, HIDDEN, HIDDEN_BY_AI, DELETED
+  views      Int       @default(0)
+  likes      Int       @default(0)
+  shareCount Int       @default(0)
+  isPinned   Boolean   @default(false)
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+  comments   Comment[]
+
+  @@index([userId])
+  @@index([categoryId])
+  @@index([status])
+  @@index([createdAt])
+}
+
+model Comment {
+  id        String   @id @default(uuid())
+  content   String
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  topicId   String
+  topic     Topic    @relation(fields: [topicId], references: [id])
+  parentId  String?  // For nested comments
+  parent    Comment? @relation("CommentReplies", fields: [parentId], references: [id])
+  replies   Comment[] @relation("CommentReplies")
+  likes     Int      @default(0)
+  shareCount Int     @default(0)
+  status    String   @default("ACTIVE") // ACTIVE, HIDDEN, DELETED
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
+  @@index([topicId])
+  @@index([parentId])
+  @@index([status])
+}
+
+model ModerationLog {
+  id          String   @id @default(uuid())
+  moderatorId String
+  user        User     @relation("ModerationModerator", fields: [moderatorId], references: [id])
+  targetType  String   // 'topic' or 'comment'
+  targetId    String
+  targetUser  User?    @relation("ModerationTarget", fields: [targetId], references: [id])
+  action      String   // e.g., 'AI_MODERATION_HIDE', 'MANUAL_HIDE', 'APPROVE'
+  reason      String?
+  status      String   @default("PENDING") // PENDING, RESOLVED, REJECTED
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([moderatorId])
+  @@index([targetType])
+  @@index([targetId])
+  @@index([createdAt])
+}
+
+model EngagementEvent {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  type      String   // 'LIKE', 'SHARE', 'VIEW'
+  targetType String  // 'topic' or 'comment'
+  targetId  String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
+  @@index([type])
+  @@index([targetType])
+  @@index([targetId])
+  @@index([createdAt])
+  @@unique([userId, targetId, type])
+}
+
+model EarningsLedger {
+  id          String   @id @default(uuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id])
+  amountCents Int      // Amount in cents
+  currency    String   @default("USD")
+  sourceType  String   // 'COMMENT', 'TOPIC', 'SHARE'
+  sourceId    String
+  status      String   @default("PENDING") // 'PENDING', 'PAID', 'CANCELLED'
+  payoutId    String?  // Reference to payout transaction
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([userId])
+  @@index([sourceType])
+  @@index([status])
+  @@index([createdAt])
+}
+
+model AuditLog {
+  id         String   @id @default(uuid())
+  action     String   // e.g., 'PAYOUT_PROCESSED', 'USER_LOGIN', 'CONTENT_MODERATED'
+  entityId   String?  // ID of the entity being acted upon
+  entityType String?  // Type of the entity (e.g., 'USER', 'TOPIC', 'COMMENT')
+  entityName String?  // Human-readable name of the entity
+  status     String?  // Status of the action (e.g., 'SUCCESS', 'FAILURE')
+  details    String?  // JSON string with additional details
+  userId     String?  // User who performed the action
+  user       User?    @relation(fields: [userId], references: [id])
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([action])
+  @@index([entityType])
+  @@index([userId])
+  @@index([createdAt])
+}
+
+model Payment {
+  id             String   @id @default(uuid())
+  orderId        String
+  order          Order    @relation(fields: [orderId], references: [id])
+  provider       String   // e.g., 'STRIPE', 'PAYPAL'
+  amountCents    Int      // Amount in cents
+  currency       String   @default("USD")
+  status         String   @default("PENDING") // PENDING, SUCCESS, FAILED, REFUNDED
+  transactionId  String?  // Provider transaction ID
+  metadata       String?  // JSON string with provider-specific data
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([orderId])
+  @@index([provider])
+  @@index([status])
+  @@index([createdAt])
+}
+
+model Order {
+  id          String   @id @default(uuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id])
+  productId   String
+  product     Product  @relation(fields: [productId], references: [id])
+  amountCents Int      // Amount in cents
+  currency    String   @default("USD")
+  status      String   @default("PENDING") // PENDING, COMPLETED, CANCELLED, REFUNDED
+  payments    Payment[]
+  reviews     Review[]
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([userId])
+  @@index([productId])
+  @@index([status])
+  @@index([createdAt])
+}
+
+model Message {
+  id         String   @id @default(uuid())
+  senderId   String
+  sender     User     @relation("SentMessages", fields: [senderId], references: [id])
+  receiverId String
+  receiver   User     @relation("ReceivedMessages", fields: [receiverId], references: [id])
+  subject    String
+  content    String
+  isPremium  Boolean  @default(false)
+  readAt     DateTime?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([senderId])
+  @@index([receiverId])
+  @@index([readAt])
+  @@index([createdAt])
+}
+
+model Upload {
+  id           String   @id @default(uuid())
+  userId       String
+  user         User     @relation(fields: [userId], references: [id])
+  fileName     String
+  fileSize     Int
+  fileType     String
+  sha256       String   @unique
+  status       String   @default("PENDING") // PENDING, SCANNED, SUSPICIOUS, QUARANTINED
+  scanReportKey String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([userId])
+  @@index([sha256])
+  @@index([status])
+  @@index([createdAt])
+}
+
+model Review {
+  id         String   @id @default(uuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id])
+  productId  String
+  product    Product  @relation(fields: [productId], references: [id])
+  orderId    String?
+  order      Order?   @relation(fields: [orderId], references: [id])
+  rating     Int      // 1-5 stars
+  title      String
+  content    String
+  status     String   @default("PENDING") // PENDING, APPROVED, REJECTED
+  helpfulYes Int      @default(0)
+  helpfulNo  Int      @default(0)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([userId])
+  @@index([productId])
+  @@index([rating])
+  @@index([status])
+  @@index([createdAt])
+}
+
+model ProductVersion {
+  id          String   @id @default(uuid())
+  productId   String
+  product     Product  @relation(fields: [productId], references: [id])
+  version     String   // e.g., "1.0.0"
+  name        String   // e.g., "Initial Release"
+  description String?
+  fileHash    String   // SHA256 hash of the file
+  fileSize    Int      // Size in bytes
+  status      String   @default("DRAFT") // DRAFT, PENDING, APPROVED, REJECTED
+  changelog   String?
+  isLatest    Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([productId])
+  @@index([version])
+  @@index([status])
+  @@index([isLatest])
+  @@index([createdAt])
+}
+
+model SiteSettings {
+  key   String @id
+  value Json
+}

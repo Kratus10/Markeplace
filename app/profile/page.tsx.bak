@@ -1,0 +1,948 @@
+'use client';
+
+import React, { useState, useEffect, useCallback } from 'react';
+import { useSession } from 'next-auth/react';
+import { useRouter } from 'next/navigation';
+import Link from 'next/link';
+import Button from '@/components/ui/Button';
+import Uploader from '@/components/ui/Uploader';
+import Card, { CardHeader, CardContent, CardFooter } from '@/components/ui/Card';
+import Input from '@/components/ui/Input';
+import Select from '@/components/ui/Select';
+import LoadingSpinner from '@/components/ui/LoadingSpinner';
+import { 
+  UserCircleIcon, 
+  CogIcon, 
+  ShoppingBagIcon, 
+  MapPinIcon, 
+  CurrencyDollarIcon, 
+  UserIcon, 
+  EnvelopeIcon, 
+  CalendarIcon, 
+  BriefcaseIcon, 
+  ChartBarIcon, 
+  EyeIcon, 
+  EyeSlashIcon,
+  PencilIcon,
+  CheckIcon,
+  XMarkIcon,
+  ShieldCheckIcon
+} from '@heroicons/react/24/outline';
+import { toast } from 'sonner';
+
+interface ProfileVisibility {
+  showRole: boolean;
+  showLocation: boolean;
+  showOccupation: boolean;
+  showBirthday: boolean;
+  showTradingExperience: boolean;
+  showAvatar: boolean;
+}
+
+interface UserProfile {
+  id: string;
+  name: string | null;
+  email: string | null;
+  image: string | null;
+  bio: string | null;
+  gender: string | null;
+  location: string | null;
+  birthday: string | null;
+  occupation: string | null;
+  tradingExperience: string | null;
+  avatar: string | null;
+  totalEarningsCents: number;
+  isPremium: boolean;
+  createdAt: string;
+  updatedAt: string;
+  profileVisibility: ProfileVisibility | null;
+}
+
+interface FormData {
+  name: string;
+  bio: string;
+  gender: string;
+  location: string;
+  birthday: string;
+  occupation: string;
+  tradingExperience: string;
+  avatar: string;
+}
+
+const ProfilePage = () => {
+  const { data: session, status, update } = useSession();
+  const router = useRouter();
+  
+  // State management
+  const [user, setUser] = useState<UserProfile | null>(null);
+  const [isEditing, setIsEditing] = useState(false);
+  const [isPrivacyEditing, setIsPrivacyEditing] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [formData, setFormData] = useState<FormData>({
+    name: '',
+    bio: '',
+    gender: '',
+    location: '',
+    birthday: '',
+    occupation: '',
+    tradingExperience: '',
+    avatar: '',
+  });
+  const [privacyData, setPrivacyData] = useState<ProfileVisibility>({
+    showRole: true,
+    showLocation: true,
+    showOccupation: true,
+    showBirthday: true,
+    showTradingExperience: true,
+    showAvatar: true,
+  });
+  const [errors, setErrors] = useState<Partial<FormData>>({});
+
+  // Authentication check
+  useEffect(() => {
+    if (status === 'unauthenticated') {
+      router.push('/auth/login');
+      return;
+    }
+    
+    if (status === 'authenticated' && session?.user && !user) {
+      fetchProfile();
+    }
+  }, [status, session, router, user]);
+
+  // Fetch user profile
+  const fetchProfile = useCallback(async () => {
+    if (!session?.user) {
+      console.log('fetchProfile: No session or user');
+      return;
+    }
+    
+    console.log('fetchProfile: Starting profile fetch');
+    
+    try {
+      setLoading(true);
+      const response = await fetch('/api/user/profile', {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+      
+      console.log('fetchProfile: API response status', response.status);
+      
+      if (!response.ok) {
+        if (response.status === 401) {
+          console.log('fetchProfile: 401 Unauthorized, trying to refresh session');
+          const refreshedSession = await update();
+          console.log('fetchProfile: Session refresh result', refreshedSession);
+          if (!refreshedSession) {
+            console.log('fetchProfile: No refreshed session, redirecting to login');
+            router.push('/auth/login');
+            return;
+          }
+          // Retry with refreshed session
+          console.log('fetchProfile: Retrying with refreshed session');
+          return fetchProfile();
+        }
+        throw new Error(`HTTP ${response.status}: ${await response.text()}`);
+      }
+      
+      const userData: UserProfile = await response.json();
+      console.log('fetchProfile: Received user data', userData);
+      setUser(userData);
+      
+      // Initialize form data
+      setFormData({
+        name: userData.name || '',
+        bio: userData.bio || '',
+        gender: userData.gender || '',
+        location: userData.location || '',
+        birthday: userData.birthday || '',
+        occupation: userData.occupation || '',
+        tradingExperience: userData.tradingExperience || '',
+        avatar: userData.avatar || '',
+      });
+      
+      // Initialize privacy data
+      setPrivacyData(userData.profileVisibility || {
+        showRole: true,
+        showLocation: true,
+        showOccupation: true,
+        showBirthday: true,
+        showTradingExperience: true,
+        showAvatar: true,
+      });
+      
+    } catch (error) {
+      console.error('Error fetching profile:', error);
+      toast.error('Failed to load profile data');
+    } finally {
+      setLoading(false);
+    }
+  }, [session, update, router]);
+
+  // Form validation
+  const validateForm = (data: FormData): Partial<FormData> => {
+    const newErrors: Partial<FormData> = {};
+    
+    if (data.name.trim().length < 2) {
+      newErrors.name = 'Name must be at least 2 characters';
+    }
+    
+    if (data.bio.length > 500) {
+      newErrors.bio = 'Bio must be less than 500 characters';
+    }
+    
+    return newErrors;
+  };
+
+  // Handle form input changes
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
+    const { name, value } = e.target;
+    setFormData(prev => ({ ...prev, [name]: value }));
+    
+    // Clear error when user starts typing
+    if (errors[name as keyof FormData]) {
+      setErrors(prev => ({ ...prev, [name]: undefined }));
+    }
+  };
+
+  // Handle privacy toggle
+  const handlePrivacyChange = (field: keyof ProfileVisibility, value: boolean) => {
+    setPrivacyData(prev => ({ ...prev, [field]: value }));
+  };
+
+  // Submit profile changes
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    const validationErrors = validateForm(formData);
+    if (Object.keys(validationErrors).length > 0) {
+      setErrors(validationErrors);
+      return;
+    }
+    
+    try {
+      setSaving(true);
+      const response = await fetch('/api/user/profile', {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(formData),
+      });
+
+      if (!response.ok) {
+        throw new Error(`Failed to update profile: ${response.status}`);
+      }
+
+      const updatedUser = await response.json();
+      setUser(prev => prev ? { ...prev, ...updatedUser } : null);
+      setIsEditing(false);
+      setErrors({});
+      toast.success('Profile updated successfully!');
+      
+    } catch (error) {
+      console.error('Error updating profile:', error);
+      toast.error('Failed to update profile. Please try again.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // Submit privacy changes
+  const handlePrivacySubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    try {
+      setSaving(true);
+      const response = await fetch('/api/user/profile-visibility', {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(privacyData),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to update privacy settings');
+      }
+
+      const result = await response.json();
+      setUser(prev => prev ? { 
+        ...prev, 
+        profileVisibility: result.profileVisibility 
+      } : null);
+      setIsPrivacyEditing(false);
+      toast.success('Privacy settings updated successfully!');
+      
+    } catch (error) {
+      console.error('Error updating privacy settings:', error);
+      toast.error('Failed to update privacy settings. Please try again.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // Cancel editing
+  const handleCancelEdit = () => {
+    if (!user) return;
+    
+    setFormData({
+      name: user.name || '',
+      bio: user.bio || '',
+      gender: user.gender || '',
+      location: user.location || '',
+      birthday: user.birthday || '',
+      occupation: user.occupation || '',
+      tradingExperience: user.tradingExperience || '',
+      avatar: user.avatar || '',
+    });
+    setErrors({});
+    setIsEditing(false);
+  };
+
+  const handleCancelPrivacyEdit = () => {
+    if (!user) return;
+    
+    setPrivacyData(user.profileVisibility || {
+      showRole: true,
+      showLocation: true,
+      showOccupation: true,
+      showBirthday: true,
+      showTradingExperience: true,
+      showAvatar: true,
+    });
+    setIsPrivacyEditing(false);
+  };
+
+  // Utility functions
+  const formatCurrency = (cents: number): string => {
+    return `$${(cents / 100).toLocaleString('en-US', {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    })}`;
+  };
+
+  const formatDate = (dateString: string): string => {
+    return new Date(dateString).toLocaleDateString('en-US', {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+    });
+  };
+
+  const formatBirthday = (dateString: string | null): string => {
+    if (!dateString) return 'Not set';
+    return new Date(dateString).toLocaleDateString('en-US', {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+    });
+  };
+
+  // Toggle component for privacy settings
+  const PrivacyToggle = ({ 
+    checked, 
+    onChange, 
+    disabled = false 
+  }: { 
+    checked: boolean; 
+    onChange: () => void; 
+    disabled?: boolean;
+  }) => (
+    <button
+      type="button"
+      onClick={onChange}
+      disabled={disabled}
+      className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors duration-200 ease-in-out ${
+        checked ? 'bg-blue-600' : 'bg-gray-300'
+      } ${disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
+    >
+      <span
+        className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform duration-200 ease-in-out ${
+          checked ? 'translate-x-6' : 'translate-x-1'
+        }`}
+      />
+    </button>
+  );
+
+  // Loading state
+  if (status === 'loading') {
+    return (
+      <div className="container mx-auto px-4 py-12">
+        <div className="flex flex-col items-center justify-center min-h-[400px]">
+          <LoadingSpinner size="lg" />
+          <p className="mt-4 text-gray-600">Loading your profile...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // User not found (but session exists)
+  if (status === 'authenticated' && !user && !loading) {
+    return (
+      <div className="container mx-auto px-4 py-12">
+        <div className="text-center">
+          <UserCircleIcon className="mx-auto h-16 w-16 text-gray-400" />
+          <h2 className="mt-4 text-xl font-semibold text-gray-900">Profile Not Found</h2>
+          <p className="mt-2 text-gray-600">Unable to load your profile data.</p>
+          <Button onClick={fetchProfile} className="mt-4">
+            Try Again
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="container mx-auto px-4 py-8">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-8 gap-4">
+        <div>
+          <h1 className="text-3xl font-bold text-gray-900">My Profile</h1>
+          <p className="text-gray-600 mt-1">Manage your account settings and privacy</p>
+        </div>
+        <div className="flex gap-2">
+          <Button 
+            onClick={() => setIsPrivacyEditing(!isPrivacyEditing)}
+            variant={isPrivacyEditing ? "outline" : "secondary"}
+            disabled={saving}
+            className="flex items-center gap-2"
+          >
+            <ShieldCheckIcon className="h-4 w-4" />
+            {isPrivacyEditing ? 'Cancel Privacy' : 'Privacy Settings'}
+          </Button>
+          <Button 
+            onClick={() => setIsEditing(!isEditing)}
+            variant={isEditing ? "outline" : "primary"}
+            disabled={saving}
+            className="flex items-center gap-2"
+          >
+            {isEditing ? (
+              <>
+                <XMarkIcon className="h-4 w-4" />
+                Cancel Edit
+              </>
+            ) : (
+              <>
+                <PencilIcon className="h-4 w-4" />
+                Edit Profile
+              </>
+            )}
+          </Button>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        {/* User Info Card */}
+        <div className="lg:col-span-1">
+          <Card className="sticky top-4">
+            <CardHeader className="px-6 py-4 bg-gradient-to-r from-blue-50 to-indigo-50 border-b">
+              <h3 className="text-lg font-semibold text-gray-900">Profile Information</h3>
+            </CardHeader>
+            <CardContent className="p-6">
+              <div className="flex flex-col items-center text-center">
+                {/* Avatar */}
+                <div className="relative mb-4">
+                  {(user.profileVisibility?.showAvatar !== false) && user.avatar ? (
+                    <img 
+                      src={user.avatar} 
+                      alt="Profile" 
+                      className="w-24 h-24 rounded-full object-cover border-4 border-white shadow-lg"
+                      onError={(e) => {
+                        const target = e.target as HTMLImageElement;
+                        target.style.display = 'none';
+                      }}
+                    />
+                  ) : (
+                    <div className="w-24 h-24 rounded-full bg-gradient-to-br from-blue-400 to-indigo-500 flex items-center justify-center shadow-lg">
+                      <UserCircleIcon className="h-16 w-16 text-white" />
+                    </div>
+                  )}
+                  {user.isPremium && (
+                    <div className="absolute -bottom-2 -right-2 bg-purple-500 rounded-full p-1">
+                      <ShieldCheckIcon className="h-4 w-4 text-white" />
+                    </div>
+                  )}
+                </div>
+
+                {/* Basic Info */}
+                <h2 className="text-xl font-bold text-gray-900 mb-1">
+                  {user.name || 'Anonymous User'}
+                </h2>
+                
+                <div className="space-y-2 text-sm text-gray-600 mb-4">
+                  <div className="flex items-center justify-center gap-2">
+                    <EnvelopeIcon className="h-4 w-4" />
+                    <span>{user.email}</span>
+                  </div>
+                  
+                  {(user.profileVisibility?.showLocation !== false) && user.location && (
+                    <div className="flex items-center justify-center gap-2">
+                      <MapPinIcon className="h-4 w-4" />
+                      <span>{user.location}</span>
+                    </div>
+                  )}
+                  
+                  {user.gender && (
+                    <div className="flex items-center justify-center gap-2">
+                      <UserIcon className="h-4 w-4" />
+                      <span>{user.gender}</span>
+                    </div>
+                  )}
+                  
+                  {(user.profileVisibility?.showBirthday !== false) && user.birthday && (
+                    <div className="flex items-center justify-center gap-2">
+                      <CalendarIcon className="h-4 w-4" />
+                      <span>{formatBirthday(user.birthday)}</span>
+                    </div>
+                  )}
+                  
+                  {(user.profileVisibility?.showOccupation !== false) && user.occupation && (
+                    <div className="flex items-center justify-center gap-2">
+                      <BriefcaseIcon className="h-4 w-4" />
+                      <span>{user.occupation}</span>
+                    </div>
+                  )}
+                  
+                  {(user.profileVisibility?.showTradingExperience !== false) && user.tradingExperience && (
+                    <div className="flex items-center justify-center gap-2">
+                      <ChartBarIcon className="h-4 w-4" />
+                      <span>{user.tradingExperience}</span>
+                    </div>
+                  )}
+                </div>
+                
+                {/* Earnings */}
+                <div className="w-full p-4 bg-gradient-to-r from-green-50 to-emerald-50 rounded-lg border border-green-100">
+                  <p className="text-sm text-green-700 font-medium">Total Earnings</p>
+                  <p className="text-2xl font-bold text-green-800 flex items-center justify-center gap-1 mt-1">
+                    <CurrencyDollarIcon className="h-6 w-6" />
+                    {formatCurrency(user.totalEarningsCents)}
+                  </p>
+                </div>
+                
+                {/* Premium Badge */}
+                {user.isPremium && (
+                  <div className="mt-3 px-4 py-2 bg-gradient-to-r from-purple-500 to-indigo-500 rounded-full">
+                    <span className="text-sm font-semibold text-white flex items-center gap-2">
+                      <ShieldCheckIcon className="h-4 w-4" />
+                      Premium Member
+                    </span>
+                  </div>
+                )}
+                
+                {/* Member Since */}
+                <p className="text-xs text-gray-500 mt-4">
+                  Member since {formatDate(user.createdAt)}
+                </p>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Main Content */}
+        <div className="lg:col-span-2">
+          {isPrivacyEditing ? (
+            /* Privacy Settings Form */
+            <Card>
+              <CardHeader className="px-6 py-4 bg-gradient-to-r from-purple-50 to-pink-50 border-b">
+                <div className="flex items-center gap-2">
+                  <ShieldCheckIcon className="h-5 w-5 text-purple-600" />
+                  <h3 className="text-lg font-semibold text-gray-900">Privacy Settings</h3>
+                </div>
+                <p className="text-sm text-gray-600 mt-1">Control what information is visible on your profile</p>
+              </CardHeader>
+              <CardContent className="p-6">
+                <form onSubmit={handlePrivacySubmit} className="space-y-6">
+                  {[
+                    { key: 'showRole', label: 'Show Role', desc: 'Display your user role on your profile' },
+                    { key: 'showLocation', label: 'Show Location', desc: 'Display your location on your profile' },
+                    { key: 'showOccupation', label: 'Show Occupation', desc: 'Display your occupation on your profile' },
+                    { key: 'showBirthday', label: 'Show Birthday', desc: 'Display your birthday on your profile' },
+                    { key: 'showTradingExperience', label: 'Show Trading Experience', desc: 'Display your trading experience level' },
+                    { key: 'showAvatar', label: 'Show Avatar', desc: 'Display your profile picture' },
+                  ].map((item) => (
+                    <div key={item.key} className="flex items-center justify-between py-3 border-b border-gray-100 last:border-b-0">
+                      <div className="flex-1">
+                        <label className="block text-sm font-medium text-gray-900">
+                          {item.label}
+                        </label>
+                        <p className="text-sm text-gray-500 mt-1">{item.desc}</p>
+                      </div>
+                      <PrivacyToggle
+                        checked={privacyData[item.key as keyof ProfileVisibility]}
+                        onChange={() => handlePrivacyChange(
+                          item.key as keyof ProfileVisibility, 
+                          !privacyData[item.key as keyof ProfileVisibility]
+                        )}
+                        disabled={saving}
+                      />
+                    </div>
+                  ))}
+                  
+                  <div className="flex justify-end space-x-3 pt-4 border-t">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={handleCancelPrivacyEdit}
+                      disabled={saving}
+                    >
+                      Cancel
+                    </Button>
+                    <Button 
+                      type="submit" 
+                      disabled={saving}
+                      className="flex items-center gap-2"
+                    >
+                      {saving ? (
+                        <>
+                          <LoadingSpinner size="sm" />
+                          Saving...
+                        </>
+                      ) : (
+                        <>
+                          <CheckIcon className="h-4 w-4" />
+                          Save Privacy Settings
+                        </>
+                      )}
+                    </Button>
+                  </div>
+                </form>
+              </CardContent>
+            </Card>
+          ) : isEditing ? (
+            /* Edit Profile Form */
+            <Card>
+              <CardHeader className="px-6 py-4 bg-gradient-to-r from-blue-50 to-indigo-50 border-b">
+                <div className="flex items-center gap-2">
+                  <PencilIcon className="h-5 w-5 text-blue-600" />
+                  <h3 className="text-lg font-semibold text-gray-900">Edit Profile</h3>
+                </div>
+                <p className="text-sm text-gray-600 mt-1">Update your personal information and preferences</p>
+              </CardHeader>
+              <CardContent className="p-6">
+                <form onSubmit={handleSubmit} className="space-y-6">
+                  {/* Name */}
+                  <div>
+                    <label htmlFor="name" className="block text-sm font-medium text-gray-700 mb-2">
+                      Full Name *
+                    </label>
+                    <Input
+                      id="name"
+                      name="name"
+                      type="text"
+                      value={formData.name}
+                      onChange={handleInputChange}
+                      placeholder="Enter your full name"
+                      className={errors.name ? 'border-red-300 focus:border-red-500' : ''}
+                    />
+                    {errors.name && (
+                      <p className="mt-1 text-sm text-red-600">{errors.name}</p>
+                    )}
+                  </div>
+                  
+                  {/* Bio */}
+                  <div>
+                    <label htmlFor="bio" className="block text-sm font-medium text-gray-700 mb-2">
+                      Bio
+                    </label>
+                    <textarea
+                      id="bio"
+                      name="bio"
+                      rows={4}
+                      className={`w-full px-3 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
+                        errors.bio ? 'border-red-300' : 'border-gray-300'
+                      }`}
+                      value={formData.bio}
+                      onChange={handleInputChange}
+                      placeholder="Tell us about yourself..."
+                      maxLength={500}
+                    />
+                    <div className="flex justify-between items-center mt-1">
+                      {errors.bio ? (
+                        <p className="text-sm text-red-600">{errors.bio}</p>
+                      ) : (
+                        <div />
+                      )}
+                      <p className="text-sm text-gray-500">
+                        {formData.bio.length}/500
+                      </p>
+                    </div>
+                  </div>
+                  
+                  {/* Row 1: Gender & Birthday */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div>
+                      <label htmlFor="gender" className="block text-sm font-medium text-gray-700 mb-2">
+                        Gender
+                      </label>
+                      <Select
+                        id="gender"
+                        name="gender"
+                        value={formData.gender}
+                        onChange={handleInputChange}
+                        options={[
+                          { value: '', label: 'Select Gender' },
+                          { value: 'Male', label: 'Male' },
+                          { value: 'Female', label: 'Female' },
+                          { value: 'Other', label: 'Other' },
+                          { value: 'Prefer not to say', label: 'Prefer not to say' }
+                        ]}
+                      />
+                    </div>
+                    
+                    <div>
+                      <label htmlFor="birthday" className="block text-sm font-medium text-gray-700 mb-2">
+                        Birthday
+                      </label>
+                      <Input
+                        id="birthday"
+                        name="birthday"
+                        type="date"
+                        value={formData.birthday}
+                        onChange={handleInputChange}
+                      />
+                    </div>
+                  </div>
+                  
+                  {/* Row 2: Location & Occupation */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div>
+                      <label htmlFor="location" className="block text-sm font-medium text-gray-700 mb-2">
+                        Location
+                      </label>
+                      <Input
+                        id="location"
+                        name="location"
+                        type="text"
+                        value={formData.location}
+                        onChange={handleInputChange}
+                        placeholder="City, Country"
+                      />
+                    </div>
+                    
+                    <div>
+                      <label htmlFor="occupation" className="block text-sm font-medium text-gray-700 mb-2">
+                        Occupation
+                      </label>
+                      <Input
+                        id="occupation"
+                        name="occupation"
+                        type="text"
+                        value={formData.occupation}
+                        onChange={handleInputChange}
+                        placeholder="Your job title"
+                      />
+                    </div>
+                  </div>
+                  
+                  {/* Row 3: Trading Experience & Avatar */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div>
+                      <label htmlFor="tradingExperience" className="block text-sm font-medium text-gray-700 mb-2">
+                        Trading Experience
+                      </label>
+                      <Select
+                        id="tradingExperience"
+                        name="tradingExperience"
+                        value={formData.tradingExperience}
+                        onChange={handleInputChange}
+                        options={[
+                          { value: '', label: 'Select Experience Level' },
+                          { value: 'Beginner', label: 'Beginner (0-1 years)' },
+                          { value: 'Intermediate', label: 'Intermediate (1-3 years)' },
+                          { value: 'Advanced', label: 'Advanced (3-5 years)' },
+                          { value: 'Professional', label: 'Professional (5+ years)' }
+                        ]}
+                      />
+                    </div>
+                    
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          Profile Picture
+                        </label>
+                        <Uploader
+                          onUploadSuccess={(file, key) => {
+                            // Construct the URL based on R2 bucket endpoint
+                            const url = `https://${process.env.NEXT_PUBLIC_R2_PUBLIC_URL}/${key}`;
+                            setFormData(prev => ({ ...prev, avatar: url }));
+                          }}
+                          maxFiles={1}
+                          acceptedFileTypes={['image/*']}
+                        />
+                        {formData.avatar && (
+                          <div className="mt-3 flex items-center">
+                            <span className="text-sm text-gray-600 truncate mr-2">Current: {formData.avatar}</span>
+                            <Button 
+                              size="sm" 
+                              variant="outline"
+                              onClick={() => setFormData(prev => ({ ...prev, avatar: '' }))}
+                            >
+                              Remove
+                            </Button>
+                          </div>
+                        )}
+                      </div>
+                  </div>
+                  
+
+                  {/* Submit Buttons */}
+                  <div className="flex justify-end space-x-3 pt-6 border-t">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={handleCancelEdit}
+                      disabled={saving}
+                    >
+                      Cancel
+                    </Button>
+                    <Button 
+                      type="submit" 
+                      disabled={saving}
+                      className="flex items-center gap-2"
+                    >
+                      {saving ? (
+                        <>
+                          <LoadingSpinner size="sm" />
+                          Saving...
+                        </>
+                      ) : (
+                        <>
+                          <CheckIcon className="h-4 w-4" />
+                          Save Changes
+                        </>
+                      )}
+                    </Button>
+                  </div>
+                </form>
+              </CardContent>
+            </Card>
+          ) : (
+            /* Profile View */
+            <>
+              {/* Bio Section */}
+              <Card className="mb-8">
+                <CardHeader className="px-6 py-4 bg-gradient-to-r from-gray-50 to-slate-50 border-b">
+                  <h3 className="text-lg font-semibold text-gray-900">About Me</h3>
+                </CardHeader>
+                <CardContent className="p-6">
+                  {user.bio ? (
+                    <div className="prose prose-sm max-w-none">
+                      <p className="text-gray-700 leading-relaxed">{user.bio}</p>
+                    </div>
+                  ) : (
+                    <div className="text-center py-8">
+                      <UserIcon className="mx-auto h-12 w-12 text-gray-300" />
+                      <p className="text-gray-500 italic mt-2">No bio added yet.</p>
+                      <Button 
+                        onClick={() => setIsEditing(true)}
+                        variant="outline"
+                        size="sm"
+                        className="mt-3"
+                      >
+                        Add Bio
+                      </Button>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+              
+              {/* Quick Actions Grid */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                <Link href="/account/settings" className="group">
+                  <Card className="h-full transition-all duration-200 hover:shadow-lg hover:-translate-y-1 border-2 border-transparent hover:border-blue-200">
+                    <CardContent className="text-center p-6">
+                      <div className="inline-flex items-center justify-center w-16 h-16 bg-blue-100 rounded-full mb-4 group-hover:bg-blue-200 transition-colors">
+                        <CogIcon className="h-8 w-8 text-blue-600" />
+                      </div>
+                      <h3 className="text-lg font-semibold text-gray-900 mb-2">Account Settings</h3>
+                      <p className="text-gray-600 text-sm mb-4 leading-relaxed">
+                        Update your profile, password, and notification preferences.
+                      </p>
+                      <span className="inline-flex items-center text-blue-600 font-medium text-sm group-hover:text-blue-700">
+                        Manage Settings
+                        <svg className="ml-2 h-4 w-4 transition-transform group-hover:translate-x-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                        </svg>
+                      </span>
+                    </CardContent>
+                  </Card>
+                </Link>
+                
+                <Link href="/account/orders" className="group">
+                  <Card className="h-full transition-all duration-200 hover:shadow-lg hover:-translate-y-1 border-2 border-transparent hover:border-green-200">
+                    <CardContent className="text-center p-6">
+                      <div className="inline-flex items-center justify-center w-16 h-16 bg-green-100 rounded-full mb-4 group-hover:bg-green-200 transition-colors">
+                        <ShoppingBagIcon className="h-8 w-8 text-green-600" />
+                      </div>
+                      <h3 className="text-lg font-semibold text-gray-900 mb-2">Order History</h3>
+                      <p className="text-gray-600 text-sm mb-4 leading-relaxed">
+                        Track your purchases, view invoices, and download your products.
+                      </p>
+                      <span className="inline-flex items-center text-green-600 font-medium text-sm group-hover:text-green-700">
+                        View Orders
+                        <svg className="ml-2 h-4 w-4 transition-transform group-hover:translate-x-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                        </svg>
+                      </span>
+                    </CardContent>
+                  </Card>
+                </Link>
+                
+                {user.isPremium && (
+                  <Link href="/messages" className="group">
+                    <Card className="h-full transition-all duration-200 hover:shadow-lg hover:-translate-y-1 border-2 border-transparent hover:border-purple-200">
+                      <CardContent className="text-center p-6">
+                        <div className="inline-flex items-center justify-center w-16 h-16 bg-purple-100 rounded-full mb-4 group-hover:bg-purple-200 transition-colors">
+                          <EnvelopeIcon className="h-8 w-8 text-purple-600" />
+                        </div>
+                        <div className="flex items-center justify-center gap-2 mb-2">
+                          <h3 className="text-lg font-semibold text-gray-900">Messages</h3>
+                          <ShieldCheckIcon className="h-4 w-4 text-purple-500" />
+                        </div>
+                        <p className="text-gray-600 text-sm mb-4 leading-relaxed">
+                          Send and receive private messages with other premium members.
+                        </p>
+                        <span className="inline-flex items-center text-purple-600 font-medium text-sm group-hover:text-purple-700">
+                          View Messages
+                          <svg className="ml-2 h-4 w-4 transition-transform group-hover:translate-x-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                          </svg>
+                        </span>
+                      </CardContent>
+                    </Card>
+                  </Link>
+                )}
+                
+                <Link href="/signals" className="group">
+                  <Card className="h-full transition-all duration-200 hover:shadow-lg hover:-translate-y-1 border-2 border-transparent hover:border-orange-200">
+                    <CardContent className="text-center p-6">
+                      <div className="inline-flex items-center justify-center w-16 h-16 bg-orange-100 rounded-full mb-4 group-hover:bg-orange-200 transition-colors">
+                        <ChartBarIcon className="h-8 w-8 text-orange-600" />
+                      </div>
+                      <h3 className="text-lg font-semibold text-gray-900 mb-2">Trading Signals</h3>
+                      <p className="text-gray-600 text-sm mb-4 leading-relaxed">
+                        Access exclusive trading signals and market analysis.
+                      </p>
+                      <span className="inline-flex items-center text-orange-600 font-medium text-sm group-hover:text-orange-700">
+                        View Signals
+                        <svg className="ml-2 h-4 w-4 transition-transform group-hover:translate-x-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                        </svg>
+                      </span>
+                    </CardContent>
+                  </Card>
+                </Link>
+              </div>
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export default ProfilePage;

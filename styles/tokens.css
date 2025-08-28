@@ -1,0 +1,56 @@
+:root {
+  /* Core colors */
+  --color-primary-50: #eef8ff;
+  --color-primary-100: #d6f0ff;
+  --color-primary-200: #bfe7ff;
+  --color-primary-300: #8fd6ff;
+  --color-primary-400: #54bfff;
+  --color-primary-500: #208de6;
+  --color-primary-600: #1972c2;
+  --color-primary-700: #135a9a;
+  --color-primary-800: #0e4573;
+  --color-primary-900: #0a2f4d;
+
+  --color-lime-50: #f8fff2;
+  --color-lime-100: #eeffd7;
+  --color-lime-200: #d8ffae;
+  --color-lime-300: #b6ff76;
+  --color-lime-400: #95ff45;
+  --color-lime-500: #6ee01a;
+  --color-lime-600: #58b812;
+  --color-lime-700: #41840e;
+  --color-lime-800: #2d5d0a;
+  --color-lime-900: #193807;
+
+  --surface: #ffffff;
+  --muted-surface: #f7fafc;
+  --text-default: #0b1220;
+
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 20px;
+
+  --shadow-soft: 0 12px 30px rgba(13,74,138,0.12);
+  --shadow-card: 0 6px 18px rgba(20,32,50,0.08);
+
+  /* Gradients for hero */
+  --hero-gradient: linear-gradient(90deg, rgba(32,141,230,0.95) 0%, rgba(110,224,26,0.85) 100%);
+}
+
+/* Dark mode variables: apply when <html> or <body> has .dark */
+.dark {
+  --surface: #071123;
+  --muted-surface: #071421;
+  --text-default: #e6f0ff;
+}
+
+/* Utility helper for gradient backgrounds */
+.bg-hero-gradient {
+  background: var(--hero-gradient);
+}
+
+/* Support prefers-reduced-motion */
+@media (prefers-reduced-motion: reduce) {
+  .motion-safe\:float-slow { animation: none !important; }
+  .motion-safe\:sweep-fast { animation: none !important; }
+}

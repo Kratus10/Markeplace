@@ -1,0 +1,4 @@
+-- AlterTable
+ALTER TABLE "public"."License" ADD COLUMN     "expiresAt" TIMESTAMP(3),
+ADD COLUMN     "issuedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+ADD COLUMN     "revokedAt" TIMESTAMP(3);
